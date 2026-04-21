@@ -1,16 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- LIBRARIES REQUIRED: Download pdf.min.js, pdf-lib.min.js, jszip.min.js and place in ./libs/ folder -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDF Separator</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="./libs/pdf.min.js"></script>
+<script src="./libs/pdf-lib.min.js"></script>
+<script src="./libs/jszip.min.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: 'Inter', -apple-system, system-ui, sans-serif; overflow: hidden; height: 100vh; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; overflow: hidden; height: 100vh; }
 
 .app {
   display: flex;
@@ -29,7 +29,7 @@ body { font-family: 'Inter', -apple-system, system-ui, sans-serif; overflow: hid
 }
 
 .sep-title { font-size: 1.2em; font-weight: 600; color: #1a1a1a; }
-.sep-actions { display: flex; gap: 12px; }
+.sep-actions { display: flex; gap: 12px; margin-left: auto; }
 
 .btn {
   background: white;
@@ -227,7 +227,10 @@ input[type="file"] { display: none; }
 <body>
 <div class="app">
   <div class="sep-topbar">
-    <div class="sep-title">PDF Separator</div>
+    <div class="sep-title">PDF Separator — v1.2 (Internal Use)</div>
+    <div style="font-size:11px; color:#888; margin-left:16px;">
+      🔒 All processing is done locally in your browser. No files are uploaded or transmitted externally.
+    </div>
     <div class="sep-actions">
       <button class="btn" id="sepNewBtn" style="display:none;">New File</button>
       <button class="btn btn-primary" id="sepDownloadBtn" style="display:none;" disabled>Download ZIP</button>
@@ -278,7 +281,7 @@ input[type="file"] { display: none; }
 <div class="toast-container" id="toastContainer"></div>
 
 <script>
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+pdfjsLib.GlobalWorkerOptions.workerSrc = './libs/pdf.worker.min.js';
 
 const CATEGORIES = [
   ['police-report', 'Police Report'],
@@ -404,6 +407,16 @@ function sepRenderGrid() {
   sepUpdateDownloadBtn();
 }
 
+async function isRealPDF(file) {
+  try {
+    const header = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+    const signature = String.fromCharCode(...header);
+    return signature === '%PDF';
+  } catch {
+    return false;
+  }
+}
+
 async function sepHandleFile(file) {
   if (!file) return;
   if (!isValidPdfFile(file)) {
@@ -415,6 +428,12 @@ async function sepHandleFile(file) {
     return;
   }
 
+  const realPdf = await isRealPDF(file);
+  if (!realPdf) {
+    showToast('Invalid file: not a real PDF', 'error');
+    return;
+  }
+
   showLoading('Loading PDF...');
   try {
     sepReset();
@@ -422,6 +441,12 @@ async function sepHandleFile(file) {
 
     const bytes = await file.arrayBuffer();
     const pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(bytes) }).promise;
+
+    if (pdfDoc.numPages > 150) {
+      showToast('PDF has more than 150 pages. Please split it first.', 'error');
+      hideLoading();
+      return;
+    }
 
     const pages = [];
     for (let sourcePage = 1; sourcePage <= pdfDoc.numPages; sourcePage += 1) {
